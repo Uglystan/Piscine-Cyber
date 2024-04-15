@@ -3,6 +3,21 @@ import os
 from bs4 import BeautifulSoup
 import requests
 
+request_headers = {
+"Referer": "https://www.google.com/", 
+"Connection": "keep-alive",
+"Cache-Control": "max-age=0",
+"Upgrade-Insecure-Requests": "1",
+"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Safari/605.1.15",
+"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+"Sec-Fetch-Site": "none",
+"Sec-Fetch-Mode": "navigate",
+"Sec-Fetch-User": "?1",
+"Sec-Fetch-Dest": "document",
+"Accept-Encoding": "gzip, deflate, br",
+"Accept-Language": "en-US,en;q=0.9"
+    }
+
 def use_case():
     print("Bad using. ./spider [-r] [-l length recursively] [-p path where store img] URL of WebSite\n")
     print("Option [-r] Active recursion use -l for specify depth\n")
@@ -38,7 +53,8 @@ def set_arg(arg):
             return ("./data/")
     elif arg == "url":
         try:
-            req = requests.get(arguments[len(arguments) - 1])
+            req = requests.get(arguments[len(arguments) - 1], headers=request_headers)
+            # print(req.status_code)
             if req.status_code // 100 == 2:
                 return (arguments[len(arguments) - 1])
             else:
@@ -49,32 +65,19 @@ def set_arg(arg):
 
 def download_img(image_url, storage_path, url_racine):
     img_html = None
-    try:
-        img_html = requests.get(image_url["src"])
-    except:
-        try:
-            print(url_racine + image_url["src"])
-            img_html = requests.get(url_racine + image_url["src"])
-            if img_html and img_html.status_code // 100 == 2:
-                raise
-        except:
-            try:
-                if image_url["src"].find("https://") == -1 and image_url["src"][0] == '/' and image_url["src"][1] == '/':
-                    image_url["src"] =  image_url["src"][:0] +  image_url["src"][2:]
-                    image_url["src"] = "https://" + image_url["src"]
-                    img_html = requests.get(image_url["src"])
-                    if img_html and img_html.status_code // 100 == 2:
-                        raise
-            except:
-                try:
-                    if image_url["src"].find("https://") == -1:
-                        image_url["src"] = "https://" + image_url["src"]
-                        img_html = requests.get(url_racine + image_url["src"])
-                        if img_html and img_html.status_code // 100 == 2:
-                            raise
-                except:
-                    print("\033[91mBad image URL: \033[0m", image_url["src"])
-                    return
+    
+    print(image_url["src"])
+    
+    if image_url["src"].find("https://") != -1 or image_url["src"].find("http://") != -1:
+        img_html = requests.get(image_url["src"], request_headers)
+    else:
+        if image_url["src"][0] == '/' and image_url["src"][1] == '/':
+            if url_racine.find("https://") != -1:
+                img_html = requests.get("https:" + image_url["src"], request_headers)
+            elif url_racine.find("http://") != -1:
+                img_html = requests.get("http:" + image_url["src"], request_headers)
+        elif image_url["src"][0] == '/' and image_url["src"][1] != '/':
+            img_html = requests.get(url_racine + image_url["src"], request_headers)
     
     if img_html:
         with open(storage_path, 'wb') as f:
@@ -90,7 +93,7 @@ def find_links_with_depth(url, depth, current_depth=0):
     links = []
     
     try:
-        html_page = requests.get(url)
+        html_page = requests.get(url, request_headers)
         soup = BeautifulSoup(html_page.content, 'html.parser')
         
         for link in soup.find_all('a', href=True):
@@ -107,13 +110,17 @@ def find_links_with_depth(url, depth, current_depth=0):
 def site_name(image):
     return (image["src"][image["src"].find("//") + 2:image["src"].find("/", (image["src"].find("//") + 2))])
 
-def img_name(image, file_name):
-    # name = image["src"][image["src"].rfind("/") + 1:len(image["src"])]
-    ext = image["src"][image["src"].rfind("."):len(image["src"])]
-    name = str(file_name) + ext
-    if len(ext) > 5:
-        name = str(file_name) + ".jpg"
-    # if (name.rfind('.') == -1 or len(name[name.rfind('.'):len(name)]) > 5):
+def img_name(image):
+    end_ext = ""
+    i: int = image["src"].rfind('.')
+    end_ext += image["src"][i]
+    i+=1
+    while i < len(image["src"]) and (image["src"][i].isalpha() == True or image["src"][i] == '.'):
+        end_ext += image["src"][i]
+        i += 1
+    name = image["src"][image["src"].rfind("/") + 1:image["src"].rfind(".")]
+    # ext = image["src"][image["src"].rfind("."):end_ext]
+    name = name + end_ext
     return (name)
 
 def main():
@@ -133,17 +140,17 @@ def main():
         file_name: int = 0
         
         try:
-            html_page = requests.get(link)
+            html_page = requests.get(link, request_headers)
         except:
             continue
         
         soup = BeautifulSoup(html_page.content, 'html.parser')
         link_img = soup.find_all('img', src=True)
-        
+        print(link_img)
         for image in link_img:
             print(f"src = ", image["src"])
             if image["src"] != "":
-                download_img(image, p_opt + site_name(image) + '-' + img_name(image, file_name), link[0:link.find("/", (link.find("//") + 2))])
+                download_img(image, p_opt + site_name(image) + '-' + img_name(image), link[0:link.find("/", (link.find("//") + 2))])
                 file_name+=1
 
 
